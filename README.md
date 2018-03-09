@@ -10,4 +10,4 @@ muti-channel Serial or USB Tool.
 这个工具平时是自己用的，刚写完第一版，很是粗糙，先放到git上来，慢慢优化代码，**力求做到代码简洁**！
 
 
-![效果图](https://note.youdao.com/yws/res/6820/687E388221024567A80274502CC7AC07)
+![image](https://note.youdao.com/yws/public/resource/6fc50104df2bbc09d34c3fc42c337e0c/xmlnote/687E388221024567A80274502CC7AC07/6820)
