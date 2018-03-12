@@ -10,10 +10,9 @@ muti-channel Serial or USB Tool.
 这个工具平时是自己用的，刚写完第一版，很是粗糙，先放到git上来，慢慢优化代码，**力求做到代码简洁**！
 
 
-![image](https://note.youdao.com/yws/public/resource/6fc50104df2bbc09d34c3fc42c337e0c/xmlnote/687E388221024567A80274502CC7AC07/6820)
+![](https://note.youdao.com/yws/public/resource/6fc50104df2bbc09d34c3fc42c337e0c/xmlnote/687E388221024567A80274502CC7AC07/6820)
 
 
-##使用
 ### 背景
 这是一个专用工具，用来进行DDR的QA验证的。
 
@@ -25,7 +24,25 @@ muti-channel Serial or USB Tool.
 
 因此我们的验证系统就是分软硬件两部分，硬件板端来跑安卓系统，以及验证pattern，PC上位机负责控制以及数据的收集，通信接口是USB跟串口（嗯，可以很负责任的告诉你，目前（2018.3）国内大部分中小企业都是这么干的，中小的定义就是有没有买几百万美金一台的ATE设备）。
 
-关于DDR cell的测试算法介绍以及关键研究点，我会在知乎里面写个专栏的，感兴趣的到时可以去看哈！
+![](https://note.youdao.com/yws/public/resource/6fc50104df2bbc09d34c3fc42c337e0c/xmlnote/363E9C98DC074AC4B42153EF0BBF4BC6/6933)
+
+上面为系统架构图，PC机负责流程控制，中间的通信服务器负责duosite管理以及稳定数据交互，下面的clients接收指令及pattern并按指令运行。
+
+这里分享的是PC机的多site部分。
+
+**待分享：**
+- [x] 串口通信服务器
+    + 服务器架构
+    + 服务器硬件设计及关键器件选型
+    + 服务器下位机设计
+    + 服务器通信接口设计
+    + 服务器应用之《基于机器学习的异常客户端识别》
+- [x] clients值UDT
+    + 硬件架构原则
+    + 基于ARM A53的硬件设计
+    + 基于NEON的汇编加速研究
+
+关于DDR cell的测试算法介绍以及关键研究点(不涉及具体实现代码)，我会在知乎里面写个专栏的，感兴趣的到时可以去看哈！
 
 
 ### 目的
