@@ -52,6 +52,7 @@ class  serial_part(QObject):
 		我的预期是：界面程序中每增加一个串口部分，我就直接调用这个类就好了；
 		在信号发射后，槽函数接收到信号就创建一个串口实例，不能打开则直接报错并弹框显示错误，能打开则自动连接；
 		'''
+		self.current_system = "Android7.x"
 		self.channel = channel
 		self.port = port
 		self.receive_data_zxl = ''
@@ -67,8 +68,12 @@ class  serial_part(QObject):
 		self._Data_Lock = threading.Lock()
 		self.OpenSerial()
 		
-		
-		
+	def change_curSystem(self, cur_system):
+		if cur_system == self.current_system:
+			pass
+		else:
+			self.current_system = cur_system
+			
 	# Serial part.
 	def OpenSerial(self):
 		w = QWidget()
@@ -146,20 +151,26 @@ class  serial_part(QObject):
 	def check_luncher(self):
 		# 仅检测主界面是否存在！
 		# waitting for system lunch.
-		timeout = 30
+		timeout = 3
 		lunched = False
 		cmd = "dumpsys activity | grep Focus"
+		
+		self.ser.write("TestItem9" + "\r\n")
+		time.sleep(0.5)
+		
 		for i in range(10):
-			self.ser.write("TestItem8" + "\n")
+			self.ser.write("TestItem8" + "\r\n")
 			start_time = time.time()
 			while (time.time() - start_time) < timeout:
 				if self.STOP:
 					return False
 				
 				if self.receive_data_zxl == '':
-					time.sleep(0.2)
+					time.sleep(0.5)
 					continue
-				elif "com.android.tv.launcher" in self.receive_data_zxl:
+					#com.softwinner.firelauncher ===> Android4.4
+					#"com.android.tv.launcher"  ===> Android7.X
+				elif ("com.android.tv.launcher" in self.receive_data_zxl) or ("com.softwinner.firelauncher" in self.receive_data_zxl):
 					lunched = True
 					break
 				else:
@@ -181,6 +192,11 @@ class  serial_part(QObject):
 		#   True: enter sleeping.
 		#   false: enter sleepMode failed with timeout
 		check_sleep_sting = "PM: Entering mem sleep"  # "PM: suspend entry"
+		self.ser.write("TestItem9" + "\n")
+		time.sleep(0.1)
+		self.ser.write("TestItem0#echo 8 >/proc/sysrq-trigger\r\n")
+		time.sleep(1)
+		
 		
 		self.ser.write("TestItem5" + "\n")
 		start_time = time.time()
@@ -271,22 +287,22 @@ class  serial_part(QObject):
 	
 	def run_memtester(self, size="128M", circle="1000"):
 		
-		run_size = size
-		run_circle = circle
-		
-		END_string = "8-bit Writes"
-		START_sting = "memtester version"
-		cmd = "TestItem0#/data/memtester {} {} 0 &".format(size, circle)
-		
-		start_pattern = re.compile(START_sting)
-		end_pattern = re.compile(END_string)
+		if self.current_system == "Android7.x":
+			cmd = "TestItem0#/data/memtester {} {} 0 &".format(size, circle)
+		elif self.current_system == "Android4.4":
+			cmd = "TestItem0#/data/memtester {} {} 0 &".format("20M", 1000)
+		else:
+			return False
 		
 		self.ser.write(cmd + "\n")
-		
+		print(cmd)
 		# 开四核
 		# for i in range(4):
 		# 	self.ser.write(cmd + "\n")
-		
+		END_string = "8-bit Writes"
+		START_sting = "memtester version"
+		start_pattern = re.compile(START_sting)
+		end_pattern = re.compile(END_string)
 		StartTime = time.time()
 		while True:
 			# 数据量太大的时候会导致搜索很费时间
@@ -318,8 +334,7 @@ class  serial_part(QObject):
 		# parameter check
 		if channel == "":
 			return -10
-		
-		self.ser.write(channel + "\n")
+		self.ser.write(channel + "\r\n")
 		
 		start_time = time.time()
 		end_time = time.time()
@@ -327,16 +342,18 @@ class  serial_part(QObject):
 			if self.STOP:
 				return False
 			if self.receive_data_zxl == '':
-				time.sleep(0.2)
+				time.sleep(0.5)
 				continue
 			else:
-				search_outcome = re.search(r"\[.*?\] mA", self.receive_data_zxl)  # self.receive_data_zxl
+				# print self.receive_data_zxl
+				search_outcome = re.search(r"\[\d+\.\d+\] mA", self.receive_data_zxl)  # self.receive_data_zxl
 			# l = "petrel-p1:/ # running mode: VDD12 Current test,The Current is [143.00] mA;"
 				# "[123.34] mA"
 				# "[123.34]"
 				if search_outcome:
 					current_block = search_outcome.group().split(' ')[0]
 					# "123.34"
+					# print search_outcome,search_outcome.group(),current_block
 					current_str = re.search(r"\d+\.\d+", current_block).group()
 					return current_str
 				else:
@@ -344,7 +361,7 @@ class  serial_part(QObject):
 						self.receive_data_zxl = ''
 			
 			end_time = time.time()
-		
+			
 		# timeout return error value
 		return -10
 	
@@ -549,28 +566,28 @@ class  serial_part(QObject):
 		# record test time.
 		self.Item_testtime = time.time()
 		# 初始化：先断电再上电，并检测是否正常开机
-		print("$LPDDR3$: start to Init...\r\n")
+		# print("$LPDDR3$: start to Init...\r\n")
 
 		# power off
-		print("$LPDDR3$: start power off.\r\n")
+		# print("$LPDDR3$: start power off.\r\n")
 		self.ser.write("poweroff" + "\n")
 		time.sleep(1)
 		
 		# power on
-		print("$LPDDR3$: start power on.\r\n")
+		# print("$LPDDR3$: start power on.\r\n")
 		self.ser.write("poweron" + "\n")
 		
-		timeout = 30
+		timeout = 40
 		StartTime = time.time()
 		EndTime = time.time()
 		while EndTime - StartTime < timeout:
 			# 插的哨子
 			if self.STOP:
 				return False
-
+				
 			if self.receive_data_zxl == '':
-				time.sleep(0.2)
-			elif "psci: CPU1 killed" in self.receive_data_zxl:
+				time.sleep(0.4)
+			elif ("psci: CPU1 killed" in self.receive_data_zxl) or ("Starting kernel" in self.receive_data_zxl):
 				break
 			else:
 				# 这里是有安全隐患的，假如在上面判断期间就有数据进来，那么我可能是检测不到的；
@@ -598,7 +615,7 @@ class  serial_part(QObject):
 			#轮训速度太快了
 			if self.receive_data_zxl == '':
 				time.sleep(0.2)
-			elif "petrel-p1:/ #" in self.receive_data_zxl:
+			elif ("petrel-p1:/ #" in self.receive_data_zxl) or ("root@petrel-p1:/ #" in self.receive_data_zxl):
 				break
 			else:
 				with self._Data_Lock:
@@ -633,10 +650,11 @@ class  serial_part(QObject):
 		self.Item_testtime = time.time()
 		
 		print("$LPDDR3$: start to mainscreen...\r\n")
-		
+
 		# flush serial buffer
 		with self._Data_Lock:
 			self.receive_data_zxl = ""
+			
 		# 是使得H6在开机状态下回到主界面；
 		# 测试主界面下的电流值
 		# print("$LPDDR3$: start to back to mainscreen.\r\n")
@@ -773,25 +791,36 @@ class  serial_part(QObject):
 		# 0 初始化：先断电再上电，并检测是否正常开机
 		print("$LPDDR3$: start to RunTest...\r\n")
 		
-		time.sleep(0.1)
-		self.ser.write("TestItem0#echo 0 >/proc/sysrq-trigger\r\n")
-		
 		# 3 发送指令并检测
 		# 3.1 for sure: get root authority;
 		self.ser.write("TestItem9" + "\n")
+		
+		time.sleep(0.1)
+		self.ser.write("TestItem0#echo 0 >/proc/sysrq-trigger\r\n")
 		
 		# 3.2 run memtester
 		# Mode：blocked
 		# self.start_thread_target(self.run_memtester, name="TestItem_run_memtester_caller")
 		time.sleep(0.1)
 		# just send am instryction instead.
-		self.ser.write(
-			"TestItem0#am start -n com.softwinner.TvdVideo/.TvdVideoActivity -d /sdcard/Movies/4K-super_car2.mp4\r\n")
+
+		if self.current_system == "Android7.x":
+			self.ser.write(
+				"TestItem0#am start -n com.softwinner.TvdVideo/.TvdVideoActivity -d /sdcard/Movies/4K-super_car2.mp4\r\n")
+		elif self.current_system == "Android4.4":
+			self.ser.write("TestItem0#am start -n org.cocos2dx.FishingJoy2/.FishingJoy2\r\n")
+			time.sleep(10)
+			self.ser.write("TestItem0#input tap 640 700\r\n")
+			time.sleep(2)
+			self.ser.write("TestItem0#input tap 640 700\r\n")
+		else:
+			return False
+		
 		time.sleep(3)
 		
 		self.run_memtester(size="128M", circle="1000")
 		# 191.8s
-		print("memtester 128M 1 ,startup spend time = %.1f" % self.mem_runtime)
+		
 		
 		# 3.3 start uiautomator and check
 		# print("$LPDDR3$: start to run Uiautomator.\r\n")
@@ -818,7 +847,7 @@ class  serial_part(QObject):
 		start_time = time.time()
 		systemdown_starttime = time.time()
 		test_status = ""
-		print start_time,systemdown_starttime
+		# print start_time,systemdown_starttime
 		############## test block########
 		# while not self.STOP:
 		# 	if self.receive_data_zxl:
@@ -853,6 +882,7 @@ class  serial_part(QObject):
 					# 这里可能会有问题，公共资源我强制占用可能会导致界面那显示不出来
 					# 这里想解决的问题是：假如我写完之后不清空，那么很有可能就是重复写进log文件了，存在的问题是清空了就不能在界面显示了
 					test_status = "mem_failure"
+					break
 			
 				#这里要做个log存储的函数；
 				
@@ -908,11 +938,15 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 	def __init__(self, parent=None):
 		super(Ui, self).__init__(parent=parent)
 		self.setupUi(self)
-		
+		self.system = "Android4.4"
 		###########cfg##########
 		self.LogPath = ""
 	
 		###########serial##########
+		self.serial1 = ''
+		self.serial2 = ''
+		self.serial3 = ''
+		self.serial4 = ''
 		self.SerialPort1 = ''
 		self.SerialPort2 = ''
 		self.SerialPort3 = ''
@@ -930,27 +964,24 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 	###################################################################
 	# find serial uart (period = 1s)
 	
-	# #直接继承自QtGui.QWidget，所以我这里直接重载就好了
-	# def keyPressEvent(self, event):
-	# 	key = event.key()
-	# 	# 按下D
-	# 	if key == QtCore.Qt.Key_1:
-	# 		print "1"
-	# 		# self.serial1_startTest()
-	# 	elif key == QtCore.Qt.Key_2 and self.SerialPort2 != '':
-	# 		self.serial2_startTest()
-	# 	elif key == QtCore.Qt.Key_3 and self.SerialPort3 != '':
-	# 		self.serial3_startTest()
-	# 	elif key == QtCore.Qt.Key_4 and self.SerialPort4 != '':
-	# 		self.serial4_startTest()
-	# 	# 按ESC键，则退出程序
-	# 	elif key == QtCore.Qt.Key_Escape:
-	# 		sys.exit()
-	# 	else:
-	# 		pass
-		
-			
-			
+	#直接继承自QtGui.QWidget，所以我这里直接重载就好了
+	def keyPressEvent(self, event):
+		key = event.key()
+		# 按下D
+		if key == QtCore.Qt.Key_1:
+			self.serial1_startTest()
+		elif key == QtCore.Qt.Key_2 and self.SerialPort2 != '':
+			self.serial2_startTest()
+		elif key == QtCore.Qt.Key_3 and self.SerialPort3 != '':
+			self.serial3_startTest()
+		elif key == QtCore.Qt.Key_4 and self.SerialPort4 != '':
+			self.serial4_startTest()
+		# 按ESC键，则退出程序
+		elif key == QtCore.Qt.Key_Escape:
+			sys.exit()
+		else:
+			pass
+	
 	def AutoDetect_SerialDevices(self):
 		'''
         线程检测连接设备的状态
@@ -1048,6 +1079,9 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 		if port == "Refresh":
 			self.comboBox.clear()
 			self.comboBox.addItems(["Refresh"]+self.temp_serial)
+			#close serial connected.
+			if self.serial1:
+				self.serial1.STOP = True
 
 		else:
 			# 这里是处理你在下拉表里面随便乱点的情况；
@@ -1078,7 +1112,7 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 		# is testting...
 		# self.tableWidget.insertRow(self.tableWidget.rowCount())
 		self.init_table(self.tableWidget)
-		
+		self.serial1.change_curSystem(self.system)
 		if self.serial1.STOP == False:
 			#强行停止
 			self.serial1.STOP = True
@@ -1131,7 +1165,9 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 		if port == "Refresh":
 			self.comboBox_2.clear()
 			self.comboBox_2.addItems(["Refresh"] + self.temp_serial)
-		
+			# close serial connected.
+			if self.serial1:
+				self.serial1.STOP = True
 		else:
 			# 这里是处理你在下拉表里面随便乱点的情况；
 			# first time come in
@@ -1161,7 +1197,7 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 		# is testting...
 		# self.tableWidget.insertRow(self.tableWidget.rowCount())
 		self.init_table(self.tableWidget_2)
-		
+		self.serial2.change_curSystem(self.system)
 		if self.serial2.STOP == False:
 			# 强行停止
 			self.serial2.STOP = True
@@ -1215,7 +1251,9 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 		if port == "Refresh":
 			self.comboBox_3.clear()
 			self.comboBox_3.addItems(["Refresh"] + self.temp_serial)
-		
+			# close serial connected.
+			if self.serial1:
+				self.serial1.STOP = True
 		else:
 			# 这里是处理你在下拉表里面随便乱点的情况；
 			# first time come in
@@ -1245,7 +1283,7 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 		# is testting...
 		# self.tableWidget.insertRow(self.tableWidget.rowCount())
 		self.init_table(self.tableWidget_3)
-		
+		self.serial3.change_curSystem(self.system)
 		if self.serial3.STOP == False:
 			# 强行停止
 			self.serial3.STOP = True
@@ -1299,7 +1337,9 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 		if port == "Refresh":
 			self.comboBox_4.clear()
 			self.comboBox_4.addItems(["Refresh"] + self.temp_serial)
-		
+			# close serial connected.
+			if self.serial1:
+				self.serial1.STOP = True
 		else:
 			# 这里是处理你在下拉表里面随便乱点的情况；
 			# first time come in
@@ -1329,7 +1369,7 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 		# is testting...
 		# self.tableWidget.insertRow(self.tableWidget.rowCount())
 		self.init_table(self.tableWidget_4)
-		
+		self.serial4.change_curSystem(self.system)
 		if self.serial4.STOP == False:
 			# 强行停止
 			self.serial4.STOP = True
@@ -1373,6 +1413,8 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 				newItem.setBackgroundColor(Qt.green)
 				self.tableWidget_4.setItem(row, 1, newItem)
 	
+	def QA_SystemSelect(self):
+		self.system = self.comboBox_6.currentText()
 	
 	def connnect_usb(self):
 		pass

@@ -431,6 +431,8 @@ class Ui_MainWindow(object):
         font.setPointSize(9)
         self.comboBox_6.setFont(font)
         self.comboBox_6.setObjectName(_fromUtf8("comboBox_6"))
+        self.comboBox_6.addItem(_fromUtf8(""))
+        self.comboBox_6.addItem(_fromUtf8(""))
         self.pushButton_6 = QtGui.QPushButton(self.centralwidget)
         self.pushButton_6.setGeometry(QtCore.QRect(640, 20, 121, 41))
         font = QtGui.QFont()
@@ -675,6 +677,7 @@ class Ui_MainWindow(object):
         QtCore.QObject.connect(self.comboBox_4, QtCore.SIGNAL(_fromUtf8("activated(QString)")), MainWindow.serial4_connect)
         QtCore.QObject.connect(self.pushButton_4, QtCore.SIGNAL(_fromUtf8("clicked()")), MainWindow.serial3_startTest)
         QtCore.QObject.connect(self.pushButton_5, QtCore.SIGNAL(_fromUtf8("clicked()")), MainWindow.serial4_startTest)
+        QtCore.QObject.connect(self.comboBox_6, QtCore.SIGNAL(_fromUtf8("activated(QString)")), MainWindow.QA_SystemSelect)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow):
@@ -763,8 +766,9 @@ class Ui_MainWindow(object):
         self.comboBox_5.setItemText(0, _translate("MainWindow", "LPDDR3", None))
         self.label.setText(_translate("MainWindow", "选择产品", None))
         self.label_2.setText(_translate("MainWindow", "选择程序", None))
+        self.comboBox_6.setItemText(0, _translate("MainWindow", "Android4.4", None))
+        self.comboBox_6.setItemText(1, _translate("MainWindow", "Android7.x", None))
         self.pushButton_6.setText(_translate("MainWindow", "同步测试", None))
         self.pushButton_7.setText(_translate("MainWindow", "退出", None))
         self.pushButton_8.setText(_translate("MainWindow", "USB连接", None))
-
 

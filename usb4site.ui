@@ -983,6 +983,16 @@ QProgressBar::chunk {
       <pointsize>9</pointsize>
      </font>
     </property>
+    <item>
+     <property name="text">
+      <string>Android4.4</string>
+     </property>
+    </item>
+    <item>
+     <property name="text">
+      <string>Android7.x</string>
+     </property>
+    </item>
    </widget>
    <widget class="QPushButton" name="pushButton_6">
     <property name="geometry">
@@ -1536,6 +1546,22 @@ QPushButton:pressed {
     </hint>
    </hints>
   </connection>
+  <connection>
+   <sender>comboBox_6</sender>
+   <signal>activated(QString)</signal>
+   <receiver>MainWindow</receiver>
+   <slot>QA_SystemSelect()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>566</x>
+     <y>54</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>625</x>
+     <y>60</y>
+    </hint>
+   </hints>
+  </connection>
  </connections>
  <slots>
   <slot>ReadCfg_FreshCombox()</slot>
@@ -1549,5 +1575,6 @@ QPushButton:pressed {
   <slot>serial4_startTest()</slot>
   <slot>serial3_connect()</slot>
   <slot>serial4_connect()</slot>
+  <slot>QA_SystemSelect()</slot>
  </slots>
 </ui>
