@@ -52,7 +52,7 @@ class  serial_part(QObject):
 		我的预期是：界面程序中每增加一个串口部分，我就直接调用这个类就好了；
 		在信号发射后，槽函数接收到信号就创建一个串口实例，不能打开则直接报错并弹框显示错误，能打开则自动连接；
 		'''
-		self.current_system = "Android7.x"
+		self.current_system = "Android4.4"
 		self.channel = channel
 		self.port = port
 		self.receive_data_zxl = ''
@@ -62,6 +62,7 @@ class  serial_part(QObject):
 		#       0: Testting...
 		#       1: TestFail/Ready
 		# 第一个测试项检测到STOP=1则表示ready，其余项则表示FAIL;
+		# 注：STOP标志的知识测试流程，并非串口连接关系
 		self.STOP = True
 		self.FailLog_folderPath, self.database_path = self.Init_TestData()
 		# self.FailLog_folderPath,self.database_path = self.Init_TestData()
@@ -143,7 +144,7 @@ class  serial_part(QObject):
 			print("serial is opened.\r\n")
 		else:
 			w = QWidget()
-			QMessageBox.warning(w, "Message", u"串口，你去哪儿了？！")
+			QMessageBox.warning(w, "Message", u"串口连接异常！")
 			return False
 		# 重复点击按钮的判别，放到槽函数里面去识别。
 		return True
@@ -345,19 +346,20 @@ class  serial_part(QObject):
 				time.sleep(0.5)
 				continue
 			else:
-				# print self.receive_data_zxl
-				search_outcome = re.search(r"\[\d+\.\d+\] mA", self.receive_data_zxl)  # self.receive_data_zxl
-			# l = "petrel-p1:/ # running mode: VDD12 Current test,The Current is [143.00] mA;"
-				# "[123.34] mA"
-				# "[123.34]"
-				if search_outcome:
-					current_block = search_outcome.group().split(' ')[0]
-					# "123.34"
-					# print search_outcome,search_outcome.group(),current_block
-					current_str = re.search(r"\d+\.\d+", current_block).group()
-					return current_str
-				else:
-					with self._Data_Lock:
+				with self._Data_Lock:
+					# print self.receive_data_zxl
+					search_outcome = re.search(r"\[\d+\.\d+\] mA", self.receive_data_zxl)  # self.receive_data_zxl
+					# l = "petrel-p1:/ # running mode: VDD12 Current test,The Current is [143.00] mA;"
+					# "[123.34] mA"
+					# "[123.34]"
+					if search_outcome:
+						print search_outcome.group()
+						current_block = search_outcome.group().split(' ')[0]
+						# "123.34"
+						# print search_outcome,search_outcome.group(),current_block
+						current_str = re.search(r"\d+\.\d+", current_block).group()
+						return current_str
+					else:
 						self.receive_data_zxl = ''
 			
 			end_time = time.time()
@@ -570,29 +572,44 @@ class  serial_part(QObject):
 
 		# power off
 		# print("$LPDDR3$: start power off.\r\n")
-		self.ser.write("poweroff" + "\n")
-		time.sleep(1)
+		# self.ser.write("poweroff" + "\n")
+		# time.sleep(1)
 		
 		# power on
 		# print("$LPDDR3$: start power on.\r\n")
 		self.ser.write("poweron" + "\n")
 		
-		timeout = 40
+		timeout = 30
 		StartTime = time.time()
 		EndTime = time.time()
+		fatal_error = 0
 		while EndTime - StartTime < timeout:
 			# 插的哨子
 			if self.STOP:
 				return False
 				
-			if self.receive_data_zxl == '':
-				time.sleep(0.4)
-			elif ("psci: CPU1 killed" in self.receive_data_zxl) or ("Starting kernel" in self.receive_data_zxl):
-				break
+			if self.receive_data_zxl == '' and fatal_error < 30:
+				fatal_error += 1
+				time.sleep(0.1)
+				continue
+			elif fatal_error >= 30:
+				return False
+			# elif ("psci: CPU1 killed" in self.receive_data_zxl) or ("Starting kernel" in self.receive_data_zxl):
+			# 	# 写的方式是获取锁再写，而我这里则是直接读，因此很有可能就是数据那边写到一半，我这就开始读了，因此很有可能读不到数据
+			# 	# 因此原则是：要保证self.receive_data_zxl里面的数据无论何时都是一行一行的
+			# 	# 加锁的话：会导致性能大大下降，读写都有可能被阻塞，
+			# 	break
 			else:
-				# 这里是有安全隐患的，假如在上面判断期间就有数据进来，那么我可能是检测不到的；
 				with self._Data_Lock:
-					self.receive_data_zxl = ''
+					# 加锁保证数据是一行一行的，不会乱
+					if ("psci: CPU1 killed" in self.receive_data_zxl) or ("Starting kernel" in self.receive_data_zxl):
+						break
+					else:
+						#add1:防止数据是一半截
+						#发现不需要了啊！因为这里我加锁了，也就是说要获取到锁的话肯定是一整行了。
+						# self.receive_data_zxl = self.receive_data_zxl.rsplit("\n", 1)[1]
+						#所以直接清空就好了
+						self.receive_data_zxl = ''
 					
 			# print("waitting for system on.\r\n")
 			EndTime = time.time()
@@ -843,7 +860,7 @@ class  serial_part(QObject):
 		# 在memtester和视频播放起来后，是可以让他一直播放的，
 		# 我们要做的是检测其中memtester是否会报错，以及系统是否卡死
 		#########################################
-		test_time = 200
+		test_time = 60
 		start_time = time.time()
 		systemdown_starttime = time.time()
 		test_status = ""
@@ -991,6 +1008,7 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 		temp_thread = threading.Timer(0.1, self.AutoDetect_SerialDevices)
 		temp_thread.setDaemon(True)
 		temp_thread.start()
+		
 	def find_all_serial_devices(self):
 		'''
         检查串口设备
@@ -1010,6 +1028,8 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 				self.temp_serial = self.find_usb_tty()
 		except Exception as e:
 			logging.error(e)
+			
+			
 	def find_usb_tty(self, vendor_id=None, product_id=None):
 				'''
 				查找Linux下的串口设备
@@ -1081,7 +1101,10 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 			self.comboBox.addItems(["Refresh"]+self.temp_serial)
 			#close serial connected.
 			if self.serial1:
+				# stop test process
 				self.serial1.STOP = True
+				#stop Serial con
+				self.serial1.Ser_close()
 
 		else:
 			# 这里是处理你在下拉表里面随便乱点的情况；
@@ -1091,6 +1114,8 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 				self.serial1 = serial_part(self.SerialPort1, channel=1)
 				# 绑定信号槽
 				self.serial1.signal_ser.connect(self.Ser1ShowOutcome)
+				# 选择QA系统
+				self.serial1.change_curSystem(self.system)
 				print port + " connect ok!!!"
 			elif self.SerialPort1 == port:
 				pass
@@ -1106,13 +1131,15 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 				self.serial1.signal_ser.connect(self.Ser1ShowOutcome)
 				# update the
 				self.SerialPort1 = port
+				
+				self.serial1.change_curSystem(self.system)
 				print port + " connect ok!!!"
 
 	def serial1_startTest(self):
 		# is testting...
 		# self.tableWidget.insertRow(self.tableWidget.rowCount())
 		self.init_table(self.tableWidget)
-		self.serial1.change_curSystem(self.system)
+		
 		if self.serial1.STOP == False:
 			#强行停止
 			self.serial1.STOP = True
@@ -1166,8 +1193,11 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 			self.comboBox_2.clear()
 			self.comboBox_2.addItems(["Refresh"] + self.temp_serial)
 			# close serial connected.
-			if self.serial1:
-				self.serial1.STOP = True
+			if self.serial2:
+				# stop test process
+				self.serial2.STOP = True
+				# stop Serial con
+				self.serial2.Ser_close()
 		else:
 			# 这里是处理你在下拉表里面随便乱点的情况；
 			# first time come in
@@ -1176,6 +1206,8 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 				self.serial2 = serial_part(self.SerialPort2, channel=2)
 				# 绑定信号槽
 				self.serial2.signal_ser.connect(self.Ser2ShowOutcome)
+				# 选择QA系统
+				self.serial2.change_curSystem(self.system)
 				print port + " connect ok!!!"
 			elif self.SerialPort2 == port:
 				pass
@@ -1191,13 +1223,14 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 				self.serial2.signal_ser.connect(self.Ser2ShowOutcome)
 				# update the
 				self.SerialPort2 = port
+				self.serial2.change_curSystem(self.system)
 				print port + " connect ok!!!"
 	
 	def serial2_startTest(self):
 		# is testting...
 		# self.tableWidget.insertRow(self.tableWidget.rowCount())
 		self.init_table(self.tableWidget_2)
-		self.serial2.change_curSystem(self.system)
+		
 		if self.serial2.STOP == False:
 			# 强行停止
 			self.serial2.STOP = True
@@ -1252,8 +1285,11 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 			self.comboBox_3.clear()
 			self.comboBox_3.addItems(["Refresh"] + self.temp_serial)
 			# close serial connected.
-			if self.serial1:
-				self.serial1.STOP = True
+			if self.serial3:
+				# stop test process
+				self.serial3.STOP = True
+				# stop Serial con
+				self.serial3.Ser_close()
 		else:
 			# 这里是处理你在下拉表里面随便乱点的情况；
 			# first time come in
@@ -1262,6 +1298,8 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 				self.serial3 = serial_part(self.SerialPort3, channel=3)
 				# 绑定信号槽
 				self.serial3.signal_ser.connect(self.Ser3ShowOutcome)
+				# 选择QA系统
+				self.serial3.change_curSystem(self.system)
 				print port + " connect ok!!!"
 			elif self.SerialPort3 == port:
 				pass
@@ -1277,13 +1315,14 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 				self.serial3.signal_ser.connect(self.Ser3ShowOutcome)
 				# update the
 				self.SerialPort3 = port
+				self.serial3.change_curSystem(self.system)
 				print port + " connect ok!!!"
 	
 	def serial3_startTest(self):
 		# is testting...
 		# self.tableWidget.insertRow(self.tableWidget.rowCount())
 		self.init_table(self.tableWidget_3)
-		self.serial3.change_curSystem(self.system)
+		
 		if self.serial3.STOP == False:
 			# 强行停止
 			self.serial3.STOP = True
@@ -1338,8 +1377,11 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 			self.comboBox_4.clear()
 			self.comboBox_4.addItems(["Refresh"] + self.temp_serial)
 			# close serial connected.
-			if self.serial1:
-				self.serial1.STOP = True
+			if self.serial4:
+				# stop test process
+				self.serial4.STOP = True
+				# stop Serial con
+				self.serial4.Ser_close()
 		else:
 			# 这里是处理你在下拉表里面随便乱点的情况；
 			# first time come in
@@ -1348,6 +1390,8 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 				self.serial4 = serial_part(self.SerialPort4, channel=4)
 				# 绑定信号槽
 				self.serial4.signal_ser.connect(self.Ser4ShowOutcome)
+				# 选择QA系统
+				self.serial4.change_curSystem(self.system)
 				print port + " connect ok!!!"
 			elif self.SerialPort4 == port:
 				pass
@@ -1363,13 +1407,14 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 				self.serial4.signal_ser.connect(self.Ser4ShowOutcome)
 				# update the
 				self.SerialPort4 = port
+				self.serial4.change_curSystem(self.system)
 				print port + " connect ok!!!"
 	
 	def serial4_startTest(self):
 		# is testting...
 		# self.tableWidget.insertRow(self.tableWidget.rowCount())
 		self.init_table(self.tableWidget_4)
-		self.serial4.change_curSystem(self.system)
+		
 		if self.serial4.STOP == False:
 			# 强行停止
 			self.serial4.STOP = True
