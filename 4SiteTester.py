@@ -33,6 +33,9 @@ else:
 	import os
 	import re
 
+
+import ConfigParser
+
 logging.basicConfig(level=logging.DEBUG,
                     filename='ItemFailLog.txt',
 					filemode='a',
@@ -352,21 +355,28 @@ class  serial_part(QObject):
 				continue
 			else:
 				with self._Data_Lock:
-					# print self.receive_data_zxl
-					search_outcome = re.search(r"\[\d+\.\d+\] mA", self.receive_data_zxl)  # self.receive_data_zxl
-					# l = "petrel-p1:/ # running mode: VDD12 Current test,The Current is [143.00] mA;"
-					# "[123.34] mA"
-					# "[123.34]"
-					if search_outcome:
-						print search_outcome.group()
-						current_block = search_outcome.group().split(' ')[0]
-						# "123.34"
-						# print search_outcome,search_outcome.group(),current_block
-						current_str = re.search(r"\d+\.\d+", current_block).group()
-						return current_str
-					else:
-						self.receive_data_zxl = ''
-			
+					print self.receive_data_zxl, "\r\n\r\n"
+					# 现象：开机正常，跑到获取电流这就完全没反映了，系线程卡死，分析估计是正则那块报error了。
+					# 解决：加try方式，保证就算电流数据获取异常了，也不会把线程卡死。
+					try:
+						search_outcome = re.search(r"\[\d+\.\d+\] mA", self.receive_data_zxl)  # self.receive_data_zxl
+						# l = "petrel-p1:/ # running mode: VDD12 Current test,The Current is [143.00] mA;"
+						# "[123.34] mA"
+						if search_outcome:
+							# print search_outcome.group()
+							# "[123.34]"
+							current_block = search_outcome.group().split(' ')[0]
+							# "123.34"
+							current_str = re.search(r"\d+\.\d+", current_block).group()
+							return current_str
+						else:
+							self.receive_data_zxl = ''
+							
+					except Exception as e:
+						logging.warning("get current fail")
+						logging.info(self.receive_data_zxl)
+						logging.debug(e)
+						return "0.000"
 			end_time = time.time()
 			
 		# timeout return error value
@@ -488,9 +498,11 @@ class  serial_part(QObject):
 		if self.checkStop_Poweroff():
 			# 异常了，上面这个函数就把数据保存了，并且还帮你关机了，停电了，真贴心！
 			# 同时还要告诉主线程，你测试异常了哈！
+			# 没抓到电流关键字符串
 			self.signal_ser.emit({"fail_item": ["MCur_VDD12", "MCur_VDD18"]})
 			return False
 		self.TestStep = 2
+		#电流超了
 		self.signal_ser.emit(
 			{"test_step": 2, "MCur_VDD12": self.TestData_line[3], "MCur_VDD18": self.TestData_line[4]})
 		
@@ -509,9 +521,9 @@ class  serial_part(QObject):
 			# 同时还要告诉主线程，你测试异常了哈！
 			self.signal_ser.emit({"fail_item": ["SCur_VDD12", "SCur_VDD18"]})
 			return False
-		self.TestStep = 3
+		self.estStep = 3
 		self.signal_ser.emit(
-			{"test_step": 3, "SCur_VDD12": self.TestData_line[5], "SCur_VDD18": self.TestData_line[6]})
+			{"test_step": 3, "SCur_VDD12": self.TestData_line[5], "SCur_VDD18": self.TestData_line[6]})#
 		
 		# step4: runapp test
 		runapp_time_str = self.TestItem_RunTest()
@@ -972,7 +984,24 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 		self.system = "Android4.4"
 		###########cfg##########
 		self.LogPath = ""
-	
+		self.cfg = ''
+
+		self.M_VDD12min = 0.5
+		self.M_VDD12max = 200.0
+		self.M_VDD18min = 0.5
+		self.M_VDD18max = 10.0
+		
+		self.S_VDD12min = 0.5
+		self.S_VDD12max = 10.0
+		self.S_VDD18min = 0.1
+		self.S_VDD18max = 2.0
+		
+		self.cur_dict = {
+			"MCur_VDD12": [self.M_VDD12min, self.M_VDD12max],
+			"MCur_VDD18": [self.M_VDD18min, self.M_VDD18max],
+			"SCur_VDD12": [self.S_VDD12min, self.S_VDD12max],
+			"SCur_VDD18": [self.S_VDD18min, self.S_VDD18max],
+		}
 		###########serial##########
 		self.serial1 = ''
 		self.serial2 = ''
@@ -1043,7 +1072,6 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 		except Exception as e:
 			logging.error(e)
 			
-			
 	def find_usb_tty(self, vendor_id=None, product_id=None):
 				'''
 				查找Linux下的串口设备
@@ -1072,13 +1100,50 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 	def ReadCfg_FreshCombox(self):
 		fname = QtGui.QFileDialog.getOpenFileName(self, 'Open file',
 		                                          '/home')
-		with open(fname, 'r') as f:
-			Cfgs = f.readlines()
-			for line in Cfgs:
-				if "Datalog" in line:
-					#别忘了用strip来去掉头尾换行符空白符呀！
-					self.LogPath = line.split('=')[1].strip()
-	
+		# with open(fname, 'r') as f:
+		# 	Cfgs = f.readlines()
+		# 	for line in Cfgs:
+		# 		if "Datalog" in line:
+		# 			#别忘了用strip来去掉头尾换行符空白符呀！
+		# 			self.LogPath = line.split('=')[1].strip()
+		self.cfg = ConfigParser.ConfigParser()
+		self.cfg.read(fname)
+		#
+		# if "Programe" in cf.sections():
+		# 	try:
+		# 		self.system = cf.get("Programe", "system")
+		# 		self.comboBox_6.set
+		# 	except Exception as e:
+		# 		logging(e)
+		# 		w = QWidget()
+		# 		QMessageBox.warning(w, "Message", u"配置项：system不符合系统要求。")
+		# 		return False
+		#
+		if "Mcurrent" in self.cfg.sections():
+			try:
+				self.M_VDD12min = self.cfg.getfloat("Mcurrent", "VDD12min")
+				self.M_VDD12max = self.cfg.getfloat("Mcurrent", "VDD12max")
+				self.M_VDD18min = self.cfg.getfloat("Mcurrent", "VDD18min")
+				self.M_VDD18max = self.cfg.getfloat("Mcurrent", "VDD18max")
+			except Exception as e:
+				logging(e)
+				w = QWidget()
+				QMessageBox.warning(w, "Message", u"配置项：Mcurrent不符合系统要求。")
+				return False
+			
+		if "Scurrent" in self.cfg.sections():
+			try:
+				self.S_VDD12min = self.cfg.getfloat("Scurrent", "VDD12min")
+				self.S_VDD12max = self.cfg.getfloat("Scurrent", "VDD12max")
+				self.S_VDD18min = self.cfg.getfloat("Scurrent", "VDD18min")
+				self.S_VDD18max = self.cfg.getfloat("Scurrent", "VDD18max")
+			except Exception as e:
+				logging(e)
+				w = QWidget()
+				QMessageBox.warning(w, "Message", u"配置项：Mcurrent不符合系统要求。")
+				return False
+		w = QWidget()
+		QMessageBox.information(w, "Message", u"配置成功")
 	def init_table(self, table):
 		table.clearContents()
 		for item in self.TestItem:
@@ -1101,7 +1166,6 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 					# print combox
 					combox.clear()
 					combox.addItems(COMList)
-
 
 	def serial1_connect(self):
 		#创建信号槽的时候，信号选择highlight，这样子就是只要点击combox就会触发；
@@ -1150,6 +1214,10 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 				print port + " connect ok!!!"
 
 	def serial1_startTest(self):
+		if self.cfg == '':
+			w = QWidget()
+			QMessageBox.warning(w, "Message", u"先读配置文件(左上角按钮)！")
+			return False
 		# is testting...
 		# self.tableWidget.insertRow(self.tableWidget.rowCount())
 		self.init_table(self.tableWidget)
@@ -1193,7 +1261,13 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 				# self.tableWidget.verticalScrollBar().setSliderPosition(row)
 				# print key, value
 				newItem = QTableWidgetItem(str(value))
-				newItem.setBackgroundColor(Qt.green)
+				if self.cur_dict.has_key(key):
+					if float(value) >= self.cur_dict[key][0] and float(value) <= self.cur_dict[key][1]:
+						newItem.setBackgroundColor(Qt.green)
+					else:
+						newItem.setBackgroundColor(Qt.red)
+				else:
+					newItem.setBackgroundColor(Qt.green)
 				self.tableWidget.setItem(row, 1, newItem)
 				
 	
@@ -1241,6 +1315,10 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 				print port + " connect ok!!!"
 	
 	def serial2_startTest(self):
+		if self.cfg == '':
+			w = QWidget()
+			QMessageBox.warning(w, "Message", u"先读配置文件(左上角按钮)！")
+			return False
 		# is testting...
 		# self.tableWidget.insertRow(self.tableWidget.rowCount())
 		self.init_table(self.tableWidget_2)
@@ -1285,7 +1363,13 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 				# self.tableWidget.verticalScrollBar().setSliderPosition(row)
 				# print key, value
 				newItem = QTableWidgetItem(str(value))
-				newItem.setBackgroundColor(Qt.green)
+				if self.cur_dict.has_key(key):
+					if float(value) >= self.cur_dict[key][0] and float(value) <= self.cur_dict[key][1]:
+						newItem.setBackgroundColor(Qt.green)
+					else:
+						newItem.setBackgroundColor(Qt.red)
+				else:
+					newItem.setBackgroundColor(Qt.green)
 				self.tableWidget_2.setItem(row, 1, newItem)
 				
 				
@@ -1333,6 +1417,10 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 				print port + " connect ok!!!"
 	
 	def serial3_startTest(self):
+		if self.cfg == '':
+			w = QWidget()
+			QMessageBox.warning(w, "Message", u"先读配置文件(左上角按钮)！")
+			return False
 		# is testting...
 		# self.tableWidget.insertRow(self.tableWidget.rowCount())
 		self.init_table(self.tableWidget_3)
@@ -1377,7 +1465,13 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 				# self.tableWidget.verticalScrollBar().setSliderPosition(row)
 				# print key, value
 				newItem = QTableWidgetItem(str(value))
-				newItem.setBackgroundColor(Qt.green)
+				if self.cur_dict.has_key(key):
+					if float(value) >= self.cur_dict[key][0] and float(value) <= self.cur_dict[key][1]:
+						newItem.setBackgroundColor(Qt.green)
+					else:
+						newItem.setBackgroundColor(Qt.red)
+				else:
+					newItem.setBackgroundColor(Qt.green)
 				self.tableWidget_3.setItem(row, 1, newItem)
 	
 
@@ -1427,6 +1521,10 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 	def serial4_startTest(self):
 		# is testting...
 		# self.tableWidget.insertRow(self.tableWidget.rowCount())
+		if self.cfg == '':
+			w = QWidget()
+			QMessageBox.warning(w, "Message", u"先读配置文件(左上角按钮)！")
+			return False
 		self.init_table(self.tableWidget_4)
 		
 		if self.serial4.STOP == False:
@@ -1469,8 +1567,15 @@ class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 				# self.tableWidget.verticalScrollBar().setSliderPosition(row)
 				# print key, value
 				newItem = QTableWidgetItem(str(value))
-				newItem.setBackgroundColor(Qt.green)
+				if self.cur_dict.has_key(key):
+					if float(value) >= self.cur_dict[key][0] and float(value) <= self.cur_dict[key][1]:
+						newItem.setBackgroundColor(Qt.green)
+					else:
+						newItem.setBackgroundColor(Qt.red)
+				else:
+					newItem.setBackgroundColor(Qt.green)
 				self.tableWidget_4.setItem(row, 1, newItem)
+	
 	
 	def QA_SystemSelect(self):
 		self.system = self.comboBox_6.currentText()
