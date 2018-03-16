@@ -34,6 +34,8 @@ else:
 	import re
 
 logging.basicConfig(level=logging.DEBUG,
+                    filename='ItemFailLog.txt',
+					filemode='a',
                     format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',
                     datefmt='%a, %d %b %Y %H:%M:%S')
 # 结束符（16进制）CR 13; NL(LF) 10
@@ -152,7 +154,7 @@ class  serial_part(QObject):
 	def check_luncher(self):
 		# 仅检测主界面是否存在！
 		# waitting for system lunch.
-		timeout = 3
+		timeout = 5
 		lunched = False
 		cmd = "dumpsys activity | grep Focus"
 		
@@ -207,12 +209,14 @@ class  serial_part(QObject):
 			if self.receive_data_zxl == '':
 				time.sleep(0.2)
 				continue
-			elif check_sleep_sting in self.receive_data_zxl:
-				return True
 			else:
 				# 这里是有安全隐患的，假如在上面判断期间就有数据进来，那么我可能是检测不到的；
+				# 所以加锁，保证数据是一行一行的；Add @2018.3.15 by zxl
 				with self._Data_Lock:
-					self.receive_data_zxl = ''
+					if check_sleep_sting in self.receive_data_zxl:
+						return True
+					else:
+						self.receive_data_zxl = ''
 		return False
 	
 	def check_wakeup_H6(self):
@@ -229,12 +233,13 @@ class  serial_part(QObject):
 			if self.receive_data_zxl == '':
 				time.sleep(0.2)
 				continue
-			elif check_wakeup_string in self.receive_data_zxl:
-				return True
 			else:
 				# 这里是有安全隐患的，假如在上面判断期间就有数据进来，那么我可能是检测不到的；
 				with self._Data_Lock:
-					self.receive_data_zxl = ''
+					if check_wakeup_string in self.receive_data_zxl:
+						return True
+					else:
+						self.receive_data_zxl = ''
 		return False
 	
 	def checkStop_Poweroff(self):
@@ -579,7 +584,7 @@ class  serial_part(QObject):
 		# print("$LPDDR3$: start power on.\r\n")
 		self.ser.write("poweron" + "\n")
 		
-		timeout = 30
+		timeout = 40
 		StartTime = time.time()
 		EndTime = time.time()
 		fatal_error = 0
@@ -590,10 +595,12 @@ class  serial_part(QObject):
 				
 			if self.receive_data_zxl == '' and fatal_error < 30:
 				fatal_error += 1
+				if fatal_error >= 30:
+					return False
+				
 				time.sleep(0.1)
 				continue
-			elif fatal_error >= 30:
-				return False
+			
 			# elif ("psci: CPU1 killed" in self.receive_data_zxl) or ("Starting kernel" in self.receive_data_zxl):
 			# 	# 写的方式是获取锁再写，而我这里则是直接读，因此很有可能就是数据那边写到一半，我这就开始读了，因此很有可能读不到数据
 			# 	# 因此原则是：要保证self.receive_data_zxl里面的数据无论何时都是一行一行的
@@ -620,31 +627,38 @@ class  serial_part(QObject):
 			print("$LPDDR3$: system booting fail.\r\n")
 			return False
 		# init state, send "su" to H6
-		StartTime = time.time()
-		EndTime = time.time()
-		while EndTime - StartTime < timeout:
-			# 在耗时的部分加入全局停止检测
-			if self.STOP:
-				return False
-			
-			self.ser.write("TestItem9" + "\n")
-			
-			#轮训速度太快了
-			if self.receive_data_zxl == '':
-				time.sleep(0.2)
-			elif ("petrel-p1:/ #" in self.receive_data_zxl) or ("root@petrel-p1:/ #" in self.receive_data_zxl):
-				break
-			else:
-				with self._Data_Lock:
-					self.receive_data_zxl = ''
-			EndTime = time.time()
-			
-		if EndTime - StartTime + 0.5 < timeout:
-			print("$LPDDR3$: system on success.\r\n")
-		else:
-			print("$LPDDR3$: system on fail.\r\n")
-			return False
-		
+		# time.sleep(2)
+		# StartTime = time.time()
+		# EndTime = time.time()
+		# delay = 0
+		# while EndTime - StartTime < timeout:
+		# 	# 在耗时的部分加入全局停止检测
+		# 	if self.STOP:
+		# 		return False
+		#
+		# 	if self.receive_data_zxl == '':
+		# 		time.sleep(0.2)
+		# 		delay += 1
+		# 		if delay > 20:
+		# 			self.ser.write("\r\n")
+		# 	else:
+		# 		with self._Data_Lock:
+		# 			if ("petrel-p1:/ #" in self.receive_data_zxl) or ("root@petrel-p1:/ #" in self.receive_data_zxl):
+		# 				break
+		# 			else:
+		# 				# logging.debug(self.receive_data_zxl)
+		# 				# print "len=%d"%len(self.receive_data_zxl) + self.receive_data_zxl
+		# 				self.receive_data_zxl = ''
+		# 	EndTime = time.time()
+		# 	if EndTime - StartTime > 10:
+		# 		self.ser.write("TestItem9" + "\n")
+		#
+		# if EndTime - StartTime + 0.5 < timeout:
+		# 	print("$LPDDR3$: system on success.\r\n")
+		# else:
+		# 	print("$LPDDR3$: system on fail.\r\n")
+		# 	return False
+		#
 		if self.check_luncher():
 			print("$LPDDR3$: Init test PASS.\r\n")
 			self.Item_testtime = time.time() - self.Item_testtime
@@ -828,7 +842,7 @@ class  serial_part(QObject):
 			self.ser.write("TestItem0#am start -n org.cocos2dx.FishingJoy2/.FishingJoy2\r\n")
 			time.sleep(10)
 			self.ser.write("TestItem0#input tap 640 700\r\n")
-			time.sleep(2)
+			time.sleep(3)
 			self.ser.write("TestItem0#input tap 640 700\r\n")
 		else:
 			return False
