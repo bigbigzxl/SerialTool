@@ -59,6 +59,14 @@ muti-channel Serial or USB Tool.
 前后上线压力运行2000+次，均稳定运行，结论PASS。
 
 ## bug fix list
+### 2018.3.29
+
+![](https://note.youdao.com/yws/public/resource/0bb8eb7003d92004c045f93c3c67eb16/xmlnote/1AA629766F884083AF79D7174038B72F/7504)
+
+关于之前考虑的，如何实时更新测试pattern的问题，我们在工程下新建一个pattern文件夹，里面写一个pattern类，然后在主界面函数里面直接实例化测试pattern类，然后逐一调用里面的方法就好了！
+
+这样子的话就可以实现每次仅需替换pattern文件就可实现pattern更新了，甚至在没有python环境的电脑上可以直接用txt方式修改测试pattern（界面函数是不动的）。
+
 ### 2018.3.23
 设计模式：
     1、串口号即代表通道，每次传入串口号我就对应实例化一个类，这是简单工厂模式；
