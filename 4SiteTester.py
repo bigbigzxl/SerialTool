@@ -7,13 +7,7 @@
 import sip
 sip.setapi('QString', 2)
 
-
-
-import usb4site
-import sys
-from PyQt4 import QtCore, QtGui
-from PyQt4.QtCore import *
-from PyQt4.QtGui import *
+from pattern.pattern import pattern_demo
 
 
 # serial part
@@ -33,9 +27,8 @@ else:
 	import os
 	import re
 
-
 import ConfigParser
-
+import logging
 logging.basicConfig(level=logging.DEBUG,
                     filename='ItemFailLog.txt',
 					filemode='a',
@@ -47,9 +40,17 @@ CURR_ERROR = -10
 
 # usb part
 
-class  serial_part(QObject):
+import usb4site
+import sys
+from PyQt4 import QtCore, QtGui
+from PyQt4.QtCore import *
+from PyQt4.QtGui import *
+
+
+class serial_part(QObject):
 	# 创建一个信号，用来在子线程里面发送信号来改变主线程里面的界面的
 	signal_ser = pyqtSignal(dict)
+	p = pattern_demo()
 	
 	def __init__(self, port='', channel=1, parent=None):
 		super(serial_part, self).__init__(parent)
@@ -57,6 +58,7 @@ class  serial_part(QObject):
 		我的预期是：界面程序中每增加一个串口部分，我就直接调用这个类就好了；
 		在信号发射后，槽函数接收到信号就创建一个串口实例，不能打开则直接报错并弹框显示错误，能打开则自动连接；
 		'''
+		
 		self.current_system = "Android4.4"
 		self.channel = channel
 		self.port = port
@@ -73,13 +75,13 @@ class  serial_part(QObject):
 		# self.FailLog_folderPath,self.database_path = self.Init_TestData()
 		self._Data_Lock = threading.Lock()
 		self.OpenSerial()
-		
+	
 	def change_curSystem(self, cur_system):
 		if cur_system == self.current_system:
 			pass
 		else:
 			self.current_system = cur_system
-			
+	
 	# Serial part.
 	def OpenSerial(self):
 		w = QWidget()
@@ -100,45 +102,45 @@ class  serial_part(QObject):
 			self.databit = 8
 			self.stopbit = 1
 			self.ser = SerialHelper(Port=self.port,
-			                   BaudRate=self.baudrate,
-			                   ByteSize=self.databit,
-			                   Parity=self.parity,
-			                   Stopbits=self.stopbit)
+			                        BaudRate=self.baudrate,
+			                        ByteSize=self.databit,
+			                        Parity=self.parity,
+			                        Stopbits=self.stopbit)
 			self.ser.connect()
 			if self.ser.is_connected:
 				self.ser.write("poweroff\r\n")
-				#开了个线程，只要串口线连接着就不断地去取数据，取满一行就调用上层的这个处理函数来处理；
+				# 开了个线程，只要串口线连接着就不断地去取数据，取满一行就调用上层的这个处理函数来处理；
 				self.ser.on_data_received(self.serial_on_data_received)
 			else:
 				w = QWidget()
 				QMessageBox.warning(w, "Message", u"是不是已经被打开了呢？检查下吧！")
 				print "cant open [{0}] !".format(self.port)
-				
+		
 		except Exception as e:
 			logging.error(e)
 			logging.error("Open [{0}] Failed!".format(self.port))
 	
 	def Ser_close(self):
 		self.ser.disconnect()
-		
+	
 	def serial_on_data_received(self, data_line):
-			"""
-	        串口接收数据回调函数:只有在串口接收线程里面判断接收到了1行之后才会调用这个函数
-	        """
-			#这里会不会冲突的？底层往receive_data_zxl里写数据，别的地方又读又擦除的！
-			#这里装把锁，可以保证线程安全，数据不会乱，当测试函数在处理这个字符段的时候，acqure就会阻塞等待（这里有假设inwating的buffer足够大哈！）；
-			with self._Data_Lock:
-				data_line = data_line.strip().replace("\b", "")
-				# print data_line
-				self.receive_data_zxl += data_line
-				#数据量太大会怎么样？我要限制一下大小;
-				# if len(self.receive_data_zxl) > 3000:
-				# 	print "outside"
-				# 	pass
-				# else:
-				# 	print data_line
-				# 	self.receive_data_zxl += data_line
-				
+		"""
+		串口接收数据回调函数:只有在串口接收线程里面判断接收到了1行之后才会调用这个函数
+		"""
+		# 这里会不会冲突的？底层往receive_data_zxl里写数据，别的地方又读又擦除的！
+		# 这里装把锁，可以保证线程安全，数据不会乱，当测试函数在处理这个字符段的时候，acqure就会阻塞等待（这里有假设inwating的buffer足够大哈！）；
+		with self._Data_Lock:
+			data_line = data_line.strip().replace("\b", "")
+			# print data_line
+			self.receive_data_zxl += data_line
+		# 数据量太大会怎么样？我要限制一下大小;
+		# if len(self.receive_data_zxl) > 3000:
+		# 	print "outside"
+		# 	pass
+		# else:
+		# 	print data_line
+		# 	self.receive_data_zxl += data_line
+	
 	#########################################################
 	# 测试函数：
 	#    Test pattern  support part.
@@ -176,8 +178,8 @@ class  serial_part(QObject):
 				if self.receive_data_zxl == '':
 					time.sleep(0.5)
 					continue
-					#com.softwinner.firelauncher ===> Android4.4
-					#"com.android.tv.launcher"  ===> Android7.X
+				# com.softwinner.firelauncher ===> Android4.4
+				# "com.android.tv.launcher"  ===> Android7.X
 				else:
 					with self._Data_Lock:
 						# print len(self.receive_data_zxl)
@@ -210,7 +212,6 @@ class  serial_part(QObject):
 		time.sleep(0.1)
 		self.ser.write("TestItem0#echo 8 >/proc/sysrq-trigger\r\n")
 		time.sleep(1)
-		
 		
 		self.ser.write("TestItem5" + "\n")
 		start_time = time.time()
@@ -267,7 +268,7 @@ class  serial_part(QObject):
 			return True
 		else:
 			return False
-		
+	
 	def writeCMD_check(self, cmd="", check_string="", timeout=30):
 		
 		Timeout = timeout
@@ -315,34 +316,35 @@ class  serial_part(QObject):
 		
 		self.ser.write(cmd + "\n")
 		print(cmd)
-		# 开四核
-		# for i in range(4):
-		# 	self.ser.write(cmd + "\n")
+	
+	# 开四核
+	# for i in range(4):
+	# 	self.ser.write(cmd + "\n")
 	
 	
-		# END_string = "8-bit Writes"
-		# START_sting = "memtester version"
-		# start_pattern = re.compile(START_sting)
-		# end_pattern = re.compile(END_string)
-		# StartTime = time.time()
-		# while True:
-		# 	# 数据量太大的时候会导致搜索很费时间
-		# 	# if len(self.receive_data_zxl) > 100:
-		# 	# 	continue
-		# 	# if START_sting in self.receive_data_zxl:
-		# 	if self.STOP:
-		# 		return False
-		# 	if self.receive_data_zxl == '':
-		# 		time.sleep(0.2)
-		# 		continue
-		# 	elif start_pattern.search(self.receive_data_zxl):
-		# 		break
-		# 	else:
-		# 		# 这里是有安全隐患的，假如在上面判断期间就有数据进来，那么我可能是检测不到的；
-		# 		with self._Data_Lock:
-		# 			self.receive_data_zxl = ''
-		# Spend_Time = time.time() - StartTime
-		# self.mem_runtime = float('%.1f' % Spend_Time)
+	# END_string = "8-bit Writes"
+	# START_sting = "memtester version"
+	# start_pattern = re.compile(START_sting)
+	# end_pattern = re.compile(END_string)
+	# StartTime = time.time()
+	# while True:
+	# 	# 数据量太大的时候会导致搜索很费时间
+	# 	# if len(self.receive_data_zxl) > 100:
+	# 	# 	continue
+	# 	# if START_sting in self.receive_data_zxl:
+	# 	if self.STOP:
+	# 		return False
+	# 	if self.receive_data_zxl == '':
+	# 		time.sleep(0.2)
+	# 		continue
+	# 	elif start_pattern.search(self.receive_data_zxl):
+	# 		break
+	# 	else:
+	# 		# 这里是有安全隐患的，假如在上面判断期间就有数据进来，那么我可能是检测不到的；
+	# 		with self._Data_Lock:
+	# 			self.receive_data_zxl = ''
+	# Spend_Time = time.time() - StartTime
+	# self.mem_runtime = float('%.1f' % Spend_Time)
 	
 	def get_current(self, channel="", timeout=6):
 		#############channel number###############
@@ -364,7 +366,7 @@ class  serial_part(QObject):
 				return False
 			if self.receive_data_zxl == '':
 				time.sleep(0.1)
-				if end_time - start_time  > 3:
+				if end_time - start_time > 3:
 					self.ser.write(channel + "\r\n")
 				else:
 					continue
@@ -386,14 +388,14 @@ class  serial_part(QObject):
 							return current_str
 						else:
 							self.receive_data_zxl = ''
-							
+					
 					except Exception as e:
 						logging.warning("get current fail")
 						logging.info(self.receive_data_zxl)
 						logging.debug(e)
 						return "0.000"
 			end_time = time.time()
-			
+		
 		# timeout return error value
 		return -10
 	
@@ -417,9 +419,9 @@ class  serial_part(QObject):
 			os.makedirs(folder_path)
 		
 		# 存在的话，我们看下今天的测试文件有木有？
-		#channel+COM+date.csv
+		# channel+COM+date.csv
 		today_str = time.strftime('%Y%m%d', time.localtime(time.time()))
-		file_path = os.path.join(folder_path, "CH"+str(self.channel)+self.port+"-"+today_str + ".csv")
+		file_path = os.path.join(folder_path, "CH" + str(self.channel) + self.port + "-" + today_str + ".csv")
 		
 		# 今天还没存过，那么我就创建一个。
 		if not os.path.exists(file_path):
@@ -439,8 +441,9 @@ class  serial_part(QObject):
 	
 	def record_FailLog(self, data):
 		# 文件夹在软件打开的时候就初始化过了
-		FailLog_FilePath = os.path.join(self.FailLog_folderPath, "CH"+str(self.channel)+self.port+"-"+"FailLog{}.txt".format(
-			time.strftime('%Y%m%d', time.localtime(time.time()))))
+		FailLog_FilePath = os.path.join(self.FailLog_folderPath,
+		                                "CH" + str(self.channel) + self.port + "-" + "FailLog{}.txt".format(
+			                                time.strftime('%Y%m%d', time.localtime(time.time()))))
 		
 		# 今天还没存过，那么我就创建一个。
 		if not os.path.exists(FailLog_FilePath):
@@ -450,13 +453,14 @@ class  serial_part(QObject):
 		
 		# 直接写进去，没有的话就新建咯！
 		with open(FailLog_FilePath, "ab") as f:
-			f.writelines(time.strftime('[%Y-%m-%d %H:%M:%S] ', time.localtime(time.time())) + "\r\n\r\n" + data + "\r\n\r\n")
+			f.writelines(
+				time.strftime('[%Y-%m-%d %H:%M:%S] ', time.localtime(time.time())) + "\r\n\r\n" + data + "\r\n\r\n")
 	
 	def record_Log(self, data):
 		# 文件夹在软件打开的时候就初始化过了
 		Log_FilePath = os.path.join(self.FailLog_folderPath,
-		                                "CH" + str(self.channel) + self.port + "-" + "Log{}.txt".format(
-			                                time.strftime('%Y%m%d', time.localtime(time.time()))))
+		                            "CH" + str(self.channel) + self.port + "-" + "Log{}.txt".format(
+			                            time.strftime('%Y%m%d', time.localtime(time.time()))))
 		
 		# 今天还没存过，那么我就创建一个。
 		if not os.path.exists(Log_FilePath):
@@ -471,10 +475,10 @@ class  serial_part(QObject):
 	
 	def record_memtesterLOG(self, data):
 		today_str = time.strftime('%Y%m%d', time.localtime(time.time()))
-		logfile = os.path.join(self.FailLog_folderPath, "CH"+str(self.channel)+self.port+"-"+today_str + ".txt")
+		logfile = os.path.join(self.FailLog_folderPath, "CH" + str(self.channel) + self.port + "-" + today_str + ".txt")
 		with open(logfile, "ab") as f:
 			f.writelines(time.strftime('[%Y-%m-%d %H:%M:%S] ', time.localtime(time.time())) + "\r\n" + data + "\r\n")
-			
+	
 	#########################################################
 	# 测试函数：
 	#  功能测试pattern。
@@ -485,8 +489,8 @@ class  serial_part(QObject):
 		# 其次，check_serial_open里面的tkMessageBox函数是不能在线程里面执行的，因此从线程里面提出来，
 		# 虽然破坏了一定的简洁性，但是效果还是很不错的嘛！
 		if self.check_before_test():
-			path = os.path.join(os.getcwd(),"CH" + str(self.channel) + self.port + "-" + \
-					"Log{}.txt".format(time.strftime('%Y%m%d', time.localtime(time.time()))))
+			path = os.path.join(os.getcwd(), "CH" + str(self.channel) + self.port + "-" + \
+			                    "Log{}.txt".format(time.strftime('%Y%m%d', time.localtime(time.time()))))
 			if os.path.exists(path):
 				os.remove()
 			pass
@@ -496,14 +500,14 @@ class  serial_part(QObject):
 			self.start_thread_target(self.TestItem_AutoTesting, "Auto Testting.")
 		except Exception as e:
 			self.TestItem_SysPoweroff()
-		
+	
 	def TestItem_AutoTesting(self):
 		print("start to run AutoTesting...\r\n")
 		self.TestStep = 0
 		# 这个总的按钮是不闪的
 		# ["TestResult", "InitTime", "MainsceenCurrVDD12", "MainsceenCurrVDD18", "SleepCurrVDD12", "SleepCurrVDD18", "RunappTime" ]
 		self.TestData_line = ["", "", "", "", "", "", "", ""]
-
+		
 		# step0: record timestamp
 		self.TestData_line[1] = time.strftime('[%m/%d %H:%M]', time.localtime(time.time()))
 		
@@ -515,7 +519,7 @@ class  serial_part(QObject):
 		else:
 			# 表示测试异常了
 			self.STOP = True
-			
+		
 		if self.checkStop_Poweroff():
 			# 异常了，上面这个函数就把数据保存了，并且还帮你关机了，停电了，真贴心！
 			# 同时还要告诉主线程，你测试异常了哈！
@@ -533,7 +537,6 @@ class  serial_part(QObject):
 			# 表示测试异常了
 			self.STOP = True
 		
-		
 		if self.checkStop_Poweroff():
 			# 异常了，上面这个函数就把数据保存了，并且还帮你关机了，停电了，真贴心！
 			# 同时还要告诉主线程，你测试异常了哈！
@@ -541,10 +544,9 @@ class  serial_part(QObject):
 			self.signal_ser.emit({"fail_item": ["MCur_VDD12", "MCur_VDD18"]})
 			return False
 		self.TestStep = 2
-		#电流超了
+		# 电流超了
 		self.signal_ser.emit(
 			{"test_step": 2, "MCur_VDD12": self.TestData_line[3], "MCur_VDD18": self.TestData_line[4]})
-		
 		
 		# step3: sleep current test
 		sleepcurrent_str = self.TestItem_SleepTest()
@@ -554,7 +556,6 @@ class  serial_part(QObject):
 			# 表示测试异常了
 			self.STOP = True
 		
-		
 		if self.checkStop_Poweroff():
 			# 异常了，上面这个函数就把数据保存了，并且还帮你关机了，停电了，真贴心！
 			# 同时还要告诉主线程，你测试异常了哈！
@@ -562,7 +563,7 @@ class  serial_part(QObject):
 			return False
 		self.estStep = 3
 		self.signal_ser.emit(
-			{"test_step": 3, "SCur_VDD12": self.TestData_line[5], "SCur_VDD18": self.TestData_line[6]})#
+			{"test_step": 3, "SCur_VDD12": self.TestData_line[5], "SCur_VDD18": self.TestData_line[6]})  #
 		
 		# step4: runapp test
 		runapp_time_str = self.TestItem_RunTest()
@@ -572,7 +573,6 @@ class  serial_part(QObject):
 			# 表示测试异常了
 			self.STOP = True
 		
-		
 		if self.checkStop_Poweroff():
 			# 异常了，上面这个函数就把数据保存了，并且还帮你关机了，停电了，真贴心！
 			# 同时还要告诉主线程，你测试异常了哈！
@@ -580,7 +580,6 @@ class  serial_part(QObject):
 			return False
 		self.TestStep = 4
 		self.signal_ser.emit({"test_step": 4, "MEM_T": self.TestData_line[7]})
-		
 		
 		for i in self.TestData_line:
 			print i
@@ -596,7 +595,7 @@ class  serial_part(QObject):
 					self.record_TestData(self.TestData_line)
 					self.TestItem_SysPoweroff()
 					return False
-
+		
 		# step6: write test date to database
 		self.TestData_line[1] = "pass"
 		self.record_TestData(self.TestData_line)
@@ -617,6 +616,7 @@ class  serial_part(QObject):
 		else:
 			return False
 		self.start_thread_target(self.TestItem_Init, name="TestItem_Init_caller")
+	
 	def TestItem_Init(self):
 		# change True(ready, only in the front of the test pattern.) to False(Testting...)
 		print "current system is:" + self.current_system
@@ -625,12 +625,12 @@ class  serial_part(QObject):
 			check_string = "Starting kernel"
 		else:
 			check_string = "psci: CPU2 killed"
-			
+		
 		# record test time.
 		self.Item_testtime = time.time()
 		# 初始化：先断电再上电，并检测是否正常开机
 		# print("$LPDDR3$: start to Init...\r\n")
-
+		
 		# power off
 		# print("$LPDDR3$: start power off.\r\n")
 		# self.ser.write("poweroff" + "\n")
@@ -640,7 +640,7 @@ class  serial_part(QObject):
 		# print("$LPDDR3$: start power on.\r\n")
 		self.ser.write("poweron" + "\n")
 		
-		#上一次测试结束后，残余了关键字在这里面，应当及时擦除。
+		# 上一次测试结束后，残余了关键字在这里面，应当及时擦除。
 		with self._Data_Lock:
 			self.receive_data_zxl = ''
 		timeout = 40
@@ -653,7 +653,7 @@ class  serial_part(QObject):
 			# 插的哨子
 			if self.STOP:
 				return False
-				
+			
 			if self.receive_data_zxl == '' and fatal_error < 100:
 				fatal_error += 1
 				if fatal_error >= 100:
@@ -675,19 +675,19 @@ class  serial_part(QObject):
 					if check_string in self.receive_data_zxl:
 						break
 					else:
-						#add1:防止数据是一半截
-						#发现不需要了啊！因为这里我加锁了，也就是说要获取到锁的话肯定是一整行了。
+						# add1:防止数据是一半截
+						# 发现不需要了啊！因为这里我加锁了，也就是说要获取到锁的话肯定是一整行了。
 						# self.receive_data_zxl = self.receive_data_zxl.rsplit("\n", 1)[1]
-						#所以直接清空就好了
+						# 所以直接清空就好了
 						self.receive_data_zxl = ''
-					
+			
 			# print("waitting for system on.\r\n")
 			EndTime = time.time()
 		
 		if EndTime - StartTime + 0.5 < timeout:
 			print("$LPDDR3$: system booting success.\r\n")
-			# print "check_string:",check_string
-			# print self.receive_data_zxl
+		# print "check_string:",check_string
+		# print self.receive_data_zxl
 		else:
 			print("$LPDDR3$: system booting fail.\r\n")
 			return False
@@ -724,7 +724,7 @@ class  serial_part(QObject):
 		# 	print("$LPDDR3$: system on fail.\r\n")
 		# 	return False
 		#
-
+		
 		if self.check_luncher():
 			# print("$LPDDR3$: Init test PASS.\r\n")
 			self.Item_testtime = time.time() - self.Item_testtime
@@ -741,6 +741,7 @@ class  serial_part(QObject):
 			return False
 		
 		self.start_thread_target(self.TestItem_mainscreen, name="TestItem_mainscrren_caller")
+	
 	def TestItem_mainscreen(self):
 		# 主界面下的电流测试
 		# record test time.
@@ -748,11 +749,11 @@ class  serial_part(QObject):
 		self.Item_testtime = time.time()
 		
 		print("$LPDDR3$: start to mainscreen...\r\n")
-
+		
 		# flush serial buffer
 		with self._Data_Lock:
 			self.receive_data_zxl = ""
-			
+		
 		# 是使得H6在开机状态下回到主界面；
 		# 测试主界面下的电流值
 		# print("$LPDDR3$: start to back to mainscreen.\r\n")
@@ -818,6 +819,7 @@ class  serial_part(QObject):
 			return False
 		
 		self.start_thread_target(self.TestItem_SleepTest, name="TestItem_SleepTest_caller")
+	
 	def TestItem_SleepTest(self):
 		
 		# 休眠的电流测试
@@ -842,7 +844,7 @@ class  serial_part(QObject):
 		# flush
 		with self._Data_Lock:
 			self.receive_data_zxl = ""
-			
+		
 		# VDD1.8V running mode
 		try:
 			current_VDD18_str = self.get_current(channel="TestItem3")
@@ -891,6 +893,7 @@ class  serial_part(QObject):
 			return False
 		
 		self.start_thread_target(self.TestItem_RunTest, name="TestItem_RunTest_caller")
+	
 	def TestItem_RunTest(self):
 		
 		# record test time.
@@ -912,7 +915,7 @@ class  serial_part(QObject):
 		# self.start_thread_target(self.run_memtester, name="TestItem_run_memtester_caller")
 		time.sleep(0.1)
 		# just send am instryction instead.
-
+		
 		if self.current_system == "Android7.x":
 			self.ser.write(
 				"TestItem0#am start -n com.softwinner.TvdVideo/.TvdVideoActivity -d /sdcard/Movies/4K-super_car2.mp4\r\n")
@@ -927,7 +930,7 @@ class  serial_part(QObject):
 		
 		time.sleep(3)
 		
-		self.run_memtester(size="128M", circle="1000")
+		self.run_memtester(size="128M", circle="10000")
 		# 191.8s
 		
 		
@@ -952,7 +955,7 @@ class  serial_part(QObject):
 		# 在memtester和视频播放起来后，是可以让他一直播放的，
 		# 我们要做的是检测其中memtester是否会报错，以及系统是否卡死
 		#########################################
-		test_time = 60
+		test_time = 200
 		start_time = time.time()
 		systemdown_starttime = time.time()
 		test_status = ""
@@ -972,8 +975,7 @@ class  serial_part(QObject):
 		print "start to check mem ."
 		with self._Data_Lock:
 			self.receive_data_zxl = ''
-			
-		while time.time() - start_time < test_time:
+		while True:  # time.time() - start_time < test_time:
 			if self.STOP == True:
 				return False
 			if self.receive_data_zxl == "":
@@ -981,19 +983,22 @@ class  serial_part(QObject):
 					print time.time() - systemdown_starttime
 					# 系统死机
 					test_status = "systemdown"
-					break
+					print "sys down."
+				# break
 				else:
-					time.sleep(0.1)
+					time.sleep(0.2)
 					continue
 			else:
+				systemdown_starttime = time.time()
 				if "FAILURE:" in self.receive_data_zxl:
 					self.record_FailLog(self.receive_data_zxl)
 					# 这里可能会有问题，公共资源我强制占用可能会导致界面那显示不出来
 					# 这里想解决的问题是：假如我写完之后不清空，那么很有可能就是重复写进log文件了，存在的问题是清空了就不能在界面显示了
 					test_status = "mem_failure"
-					break
-			
-				#这里要做个log存储的函数；
+					print "mem fail."
+				# break
+				
+				# 这里要做个log存储的函数；
 				
 				with self._Data_Lock:
 					self.receive_data_zxl = ""
@@ -1001,7 +1006,7 @@ class  serial_part(QObject):
 				systemdown_starttime = time.time()
 		
 		if (test_status == "systemdown") or (test_status == "mem_failure"):
-			print("$LPDDR3$: run test app fail@"+test_status+".\r\n")
+			print("$LPDDR3$: run test app fail@" + test_status + ".\r\n")
 			return False
 		else:
 			self.Item_testtime = time.time() - self.Item_testtime
@@ -1034,6 +1039,7 @@ class  serial_part(QObject):
 		# else:
 		# 	return False
 		self.start_thread_target(self.TestItem_SysPoweroff, name="TestItem_SysPoweroff_caller")
+	
 	def TestItem_SysPoweroff(self):
 		# 初始化界面
 		# 全局停止标志
@@ -1041,6 +1047,8 @@ class  serial_part(QObject):
 		self.ser.write("TestItem0#reboot -p\r\n")
 		time.sleep(2)
 		self.ser.write("poweroff\r\n")
+
+
 
 class Ui(QtGui.QMainWindow, usb4site.Ui_MainWindow):  #
 	# 注意上面继承这里，整了我半天，按照网上的代码是继承自QWidget，但是我的qt designer是新建的一个MainWindow啊！所以改一下就好了！。
